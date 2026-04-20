@@ -25,14 +25,14 @@ from torch.utils.data import Dataset, DataLoader
 class Config:
     # Paths
     csi_dir: str = "/home/beltis/.cache/kagglehub/datasets/shuokanghuang/wimans/versions/1/wifi_csi/amp"
-    motion_edge_video_dir: str = "/home/beltis/.cache/kagglehub/datasets/shuokanghuang/wimans/versions/1/video_person_mask_binary_deeplabv3"
+    motion_edge_video_dir: str = "/home/beltis/.cache/kagglehub/datasets/shuokanghuang/wimans/versions/1/video_motion_edges_binary"
     original_video_dir: str = "/home/beltis/.cache/kagglehub/datasets/shuokanghuang/wimans/versions/1/video"
-    output_dir: str = "./runs/csi2segmentation_mlflow"
+    output_dir: str = "./runs/csi2edges_mlflow"
 
     # MLflow
     mlflow_tracking_uri: str = "file:./mlruns"
-    mlflow_experiment_name: str = "segmentation"
-    mlflow_run_name: str = "segmentation"
+    mlflow_experiment_name: str = "edges"   
+    mlflow_run_name: str = "edges"
 
     # Target size
     image_h: int = 128
@@ -55,7 +55,7 @@ class Config:
     num_workers: int = 0
 
     # Train
-    epochs: int = 160
+    epochs: int = 50
     lr: float = 1e-3
     weight_decay: float = 1e-4
     binary_threshold: float = 0.5
@@ -65,7 +65,6 @@ class Config:
 
     # Preview after each epoch
     preview_num_videos: int = 10
-    preview_take_every_n_test_video: int = 100
     preview_max_frames_per_video: int = 100
     preview_fps: int = 10
 
@@ -495,35 +494,42 @@ def compute_iou_from_logits(logits, targets, threshold=0.5, eps=1e-6):
 # =========================
 
 def make_triplet_frame(pred_mask, gt_mask, original_frame, size=(128, 128)):
+    w, h = size
+
     gt = (gt_mask * 255).astype(np.uint8)
     pred = (pred_mask * 255).astype(np.uint8)
 
-    gt = cv2.resize(gt, size, interpolation=cv2.INTER_NEAREST)
-    pred = cv2.resize(pred, size, interpolation=cv2.INTER_NEAREST)
+    gt = cv2.resize(gt, (w, h), interpolation=cv2.INTER_NEAREST)
+    pred = cv2.resize(pred, (w, h), interpolation=cv2.INTER_NEAREST)
+    original = cv2.resize(original_frame, (w, h), interpolation=cv2.INTER_LINEAR)
 
     gt_bgr = cv2.cvtColor(gt, cv2.COLOR_GRAY2BGR)
     pred_bgr = cv2.cvtColor(pred, cv2.COLOR_GRAY2BGR)
 
-    original = cv2.resize(original_frame, (size[0] * 2, size[1]), interpolation=cv2.INTER_LINEAR)
-
+    cv2.putText(original, "original_video", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
     cv2.putText(gt_bgr, "target_motion_edges", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
     cv2.putText(pred_bgr, "predicted_motion_edges", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-    cv2.putText(original, "original_video", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
 
-    top_row = np.concatenate([gt_bgr, pred_bgr], axis=1)
-    canvas = np.concatenate([top_row, original], axis=0)
+    # Вертикальная агрегация:
+    # сверху original_video
+    # ниже target_motion_edges
+    # ниже predicted_motion_edges
+    canvas = np.concatenate([original, gt_bgr, pred_bgr], axis=0)
     return canvas
 
 
 def select_preview_triplets(
     test_triplets: List[Tuple[Path, Path, Path]],
-    take_every_n: int,
     max_videos: int,
 ) -> List[Tuple[Path, Path, Path]]:
-    selected = test_triplets[::take_every_n] if take_every_n > 1 else test_triplets[:]
-    if len(selected) == 0 and len(test_triplets) > 0:
-        selected = test_triplets[:1]
-    return selected[:max_videos]
+    if len(test_triplets) == 0:
+        return []
+
+    if len(test_triplets) <= max_videos:
+        return test_triplets[:]
+
+    idxs = np.linspace(0, len(test_triplets) - 1, num=max_videos, dtype=int)
+    return [test_triplets[i] for i in idxs]
 
 
 @torch.no_grad()
@@ -568,7 +574,9 @@ def save_preview_videos_for_epoch(
 
             vis_w = cfg.image_w
             vis_h = cfg.image_h
-            out_size = (vis_w * 2, vis_h * 2)
+
+            # Вертикальный стек из 3 блоков
+            out_size = (vis_w, vis_h * 3)
 
             out_path = epoch_dir / f"{video_idx:02d}_{csi_path.stem}_motion_triplet.mp4"
             writer = cv2.VideoWriter(str(out_path), fourcc, cfg.preview_fps, out_size)
@@ -797,9 +805,9 @@ def main():
 
         log_dataset_info(train_triplets, val_triplets, test_triplets, train_ds, val_ds, test_ds, in_features, device)
 
+        # Ровно до 10 видео для preview / artifacts
         preview_triplets = select_preview_triplets(
             test_triplets=test_triplets,
-            take_every_n=cfg.preview_take_every_n_test_video,
             max_videos=cfg.preview_num_videos,
         )
         print(f"Preview videos per epoch: {len(preview_triplets)}")
@@ -932,7 +940,8 @@ def main():
                 device=device,
             )
 
-            for fp in saved_preview_files:
+            # В артефакты логируются до 10 видеос
+            for fp in saved_preview_files[:10]:
                 mlflow.log_artifact(fp, artifact_path=f"preview_videos/epoch_{epoch:03d}")
 
         mlflow.log_artifact(str(Path(cfg.output_dir) / "last.pt"), artifact_path="final")
@@ -942,4 +951,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()   
+    main()
