@@ -11,7 +11,6 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from catboost import CatBoostClassifier
 
 # Make repository root importable when script is called from any directory.
 THIS_FILE = Path(__file__).resolve()
@@ -129,6 +128,26 @@ def build_feature_row(df: pd.DataFrame, signal: np.ndarray, global_min: float, g
     }
 
 
+def load_model(model_path: Path, model_type: str | None):
+    # Backward compatible model loading: CatBoost (.cbm) or sklearn/joblib.
+    resolved_type = model_type
+    if resolved_type is None:
+        resolved_type = "catboost" if model_path.suffix.lower() == ".cbm" else "sklearn"
+
+    if resolved_type == "catboost":
+        from catboost import CatBoostClassifier
+
+        model = CatBoostClassifier()
+        model.load_model(str(model_path))
+        return model, resolved_type
+
+    if resolved_type == "sklearn":
+        model = joblib.load(model_path)
+        return model, resolved_type
+
+    raise ValueError(f"Unsupported model type: {resolved_type}")
+
+
 def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -> dict[str, object]:
     preproc_bundle = joblib.load(preprocessing_path)
 
@@ -141,9 +160,9 @@ def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -
     scaler_pca = preproc_bundle["scaler_pca"]
     pca = preproc_bundle["pca"]
     k_95 = int(preproc_bundle["k_95"])
+    model_type = preproc_bundle.get("model_type")
 
-    model = CatBoostClassifier()
-    model.load_model(str(model_path))
+    model, model_type = load_model(model_path, model_type)
 
     df = Parser(data_file).parse()
     signal = build_unit_signal(df, median_width)
@@ -163,7 +182,15 @@ def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -
     X_pca_95 = pca.transform(X_std)[:, :k_95]
 
     pred = int(model.predict(X_pca_95)[0])
-    proba = model.predict_proba(X_pca_95)[0].tolist()
+
+    if hasattr(model, "predict_proba"):
+        proba = model.predict_proba(X_pca_95)[0].tolist()
+    elif hasattr(model, "decision_function"):
+        score = float(model.decision_function(X_pca_95)[0])
+        p1 = 1.0 / (1.0 + np.exp(-score))
+        proba = [1.0 - p1, p1]
+    else:
+        proba = [float("nan"), float("nan")]
 
     return {
         "data_file": str(data_file),
@@ -171,6 +198,7 @@ def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -
         "predicted_label_name": "label_00" if pred == 0 else "other_labels",
         "probability_class_0": float(proba[0]),
         "probability_class_1": float(proba[1]),
+        "model_type": model_type,
         "k_95": k_95,
         "n_packets": int(len(df)),
     }
@@ -178,9 +206,9 @@ def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Infer one CSI .data sample with saved CatBoost model and preprocessing artifacts"
+        description="Infer one CSI .data sample with saved model and preprocessing artifacts"
     )
-    parser.add_argument("--model-path", type=Path, required=True, help="Path to saved CatBoost .cbm model")
+    parser.add_argument("--model-path", type=Path, required=True, help="Path to saved model (.cbm or .joblib)")
     parser.add_argument(
         "--preprocessing-path",
         type=Path,
