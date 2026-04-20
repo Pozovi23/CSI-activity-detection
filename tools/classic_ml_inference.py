@@ -136,6 +136,8 @@ def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -
     global_min = float(preproc_bundle["global_min"])
     global_max = float(preproc_bundle["global_max"])
     feature_cols = list(preproc_bundle["feature_cols"])
+    feature_min = preproc_bundle.get("feature_min")
+    feature_max = preproc_bundle.get("feature_max")
     scaler_pca = preproc_bundle["scaler_pca"]
     pca = preproc_bundle["pca"]
     k_95 = int(preproc_bundle["k_95"])
@@ -149,6 +151,14 @@ def run_inference(model_path: Path, preprocessing_path: Path, data_file: Path) -
 
     feature_df = pd.DataFrame([feature_row])
     X = feature_df[feature_cols].to_numpy(dtype=np.float64)
+
+    # If train-time feature bounds are available, clip inference features to the seen range.
+    if feature_min is not None and feature_max is not None:
+        fmin = np.asarray(feature_min, dtype=np.float64)
+        fmax = np.asarray(feature_max, dtype=np.float64)
+        if fmin.shape == X.shape[1:] and fmax.shape == X.shape[1:]:
+            X = np.clip(X, fmin, fmax)
+
     X_std = scaler_pca.transform(X)
     X_pca_95 = pca.transform(X_std)[:, :k_95]
 
