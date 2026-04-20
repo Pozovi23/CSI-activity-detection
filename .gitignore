@@ -221,6 +221,7 @@ __marimo__/
 
 # Codex
 .codex
+.matplotlib-cache/
 
 # Data
 wifi_data_set/
