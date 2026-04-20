@@ -115,6 +115,13 @@ def is_valid_data_row(row: Sequence[str]) -> bool:
     return len(row) == EXPECTED_COLUMNS
 
 
+def is_valid_csi_data_field(value: str) -> bool:
+    text = value.strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        text = text[1:-1].strip()
+    return text.startswith("[") and text.endswith("]")
+
+
 def read_rows(path: Path) -> List[List[str]]:
     rows: List[List[str]] = []
     with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
@@ -141,8 +148,11 @@ def process_rows(raw_rows: List[List[str]], stats: FileStats) -> List[List[str]]
         stats.already_had_header = True
         rows = rows[1:]
 
-    if len(rows) >= 2 and not is_valid_data_row(rows[0]) and is_valid_data_row(rows[1]):
-        if len(rows[0]) >= 3:
+    if len(rows) >= 2 and is_valid_data_row(rows[1]) and len(rows[0]) >= 3:
+        first_row_needs_repair = (not is_valid_data_row(rows[0])) or (
+            is_valid_data_row(rows[0]) and not is_valid_csi_data_field(rows[0][-1])
+        )
+        if first_row_needs_repair:
             rows[0] = rows[0][:3] + rows[1][3:]
             stats.first_row_repaired = True
 
