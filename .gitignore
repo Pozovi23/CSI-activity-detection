@@ -228,6 +228,5 @@ wifi_data_set/
 wifi_data_set_fixed/
 SHD-HAR-Dataset-main/
 
-artifacts/
 catboost_info/
 .matplotlib-cache/
