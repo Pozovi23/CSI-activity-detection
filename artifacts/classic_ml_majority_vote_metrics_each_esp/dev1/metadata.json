@@ -1,0 +1,15 @@
+{
+  "source_notebook": "classic_ml_majority_vote_metrics.ipynb",
+  "model": "SVM",
+  "selection": "GridSearchCV per ESP",
+  "esp_id": "dev1",
+  "best_params": {
+    "C": 1.0,
+    "gamma": "scale",
+    "kernel": "rbf"
+  },
+  "best_cv_score_f1": 0.9312492776736401,
+  "split": "group train/test split by test_N folders, shared across ESP, test_size=0.2, random_state=42",
+  "model_path": "/home/gleb/learning/CSI-activity-detection/artifacts/classic_ml_majority_vote_metrics_each_esp/dev1/svm_model.joblib",
+  "preprocessing_path": "/home/gleb/learning/CSI-activity-detection/artifacts/classic_ml_majority_vote_metrics_each_esp/dev1/preprocessing.joblib"
+}
