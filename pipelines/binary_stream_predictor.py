@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 # Make repository root importable when script is called from any directory.
@@ -72,7 +73,8 @@ class DirectoryWatcher:
             self.processed_folders.add(folder_key)
             return False
 
-        # Requirement: print only class 0/1 to terminal output.
+        ts = datetime.now().isoformat(timespec="seconds")
+        print(ts)
         print(pred, flush=True)
         self.processed_folders.add(folder_key)
         return True
@@ -89,9 +91,9 @@ def build_default_predictor(artifacts_dir: Path) -> BinaryPredictor:
         preproc_weights_dev1=artifacts_dir / "dev1" / "preprocessing.joblib",
         preproc_weights_dev2=artifacts_dir / "dev2" / "preprocessing.joblib",
         preproc_weights_dev3=artifacts_dir / "dev3" / "preprocessing.joblib",
-        clf_weights_dev1=artifacts_dir / "dev1" / "svm_model.joblib",
-        clf_weights_dev2=artifacts_dir / "dev2" / "svm_model.joblib",
-        clf_weights_dev3=artifacts_dir / "dev3" / "svm_model.joblib",
+        clf_weights_dev1=artifacts_dir / "dev1" / "model.joblib",
+        clf_weights_dev2=artifacts_dir / "dev2" / "model.joblib",
+        clf_weights_dev3=artifacts_dir / "dev3" / "model.joblib",
     )
 
 
@@ -108,8 +110,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--artifacts-dir",
         type=Path,
-        default=PROJECT_ROOT / "artifacts" / "fst_classic_ml_majority_vote_metrics_each_esp",
-        help="Directory with dev1/dev2/dev3 preprocessing.joblib and svm_model.joblib",
+        default=PROJECT_ROOT / "artifacts" / "new_classic_ml_majority_vote_metrics_each_esp",
+        help="Directory with dev1/dev2/dev3 preprocessing.joblib and model.joblib",
     )
     parser.add_argument(
         "--poll-interval",
@@ -139,9 +141,9 @@ def main() -> int:
         artifacts_dir / "dev1" / "preprocessing.joblib",
         artifacts_dir / "dev2" / "preprocessing.joblib",
         artifacts_dir / "dev3" / "preprocessing.joblib",
-        artifacts_dir / "dev1" / "svm_model.joblib",
-        artifacts_dir / "dev2" / "svm_model.joblib",
-        artifacts_dir / "dev3" / "svm_model.joblib",
+        artifacts_dir / "dev1" / "model.joblib",
+        artifacts_dir / "dev2" / "model.joblib",
+        artifacts_dir / "dev3" / "model.joblib",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
