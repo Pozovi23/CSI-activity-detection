@@ -1,38 +1,29 @@
-# репос для csi
-
-## Описания скриптов
-
-Фикс кривых csv
+# Пайплайн рилтайма
+-------------------
 ```
-python tools/fix_csi_logs.py wifi_data_set --output-dir wifi_data_set_fixed
+pip install pyserial
 ```
 
-Проверка csv(путь до датасета исправляйте внутри файла)
-
+Выводите порты, к которым подключены есп:
 ```
-python tools/validate_fixed_csi_dataset.py
-```
-
-Пример применения парсера
-```
-from tools.csi_parser import Parser
-p = Parser('wifi_data_set_fixed/id_person_01/label_00/test_01/test1__dev1_64_E8_33_57_AA_F4.data').parse()
-print(p.iloc[0])
+python3 test.py
 ```
 
-
-------------------------
-## Пайплайн предсказания бинарных меток на наличие/отсутствие движения
+Используя эти порты, выполняем:
 ```
-pipelines/binary_predictor.py
+python3 data_collect/receiver.py --output ./csi_data --window 100 --overlap 50 --ports /dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2 --baud 115200
 ```
 
-Пример в 
+window - колво измерений в файле  
+overlap - колво пересечений таймстемпов в двух соседних файлах
+
+-------------------
+Запуск пайплайна детекции:
+
+watch-dir - директория куда срутся файлы  
+poll-interval - время задержки  
+artifacts-dir - путь до весов  
 ```
-experiments_notebooks/binary_predictor.ipynb
+python3 pipelines/binary_stream_predictor.py --watch-dir ./csi_data --poll-interval 1.0 --artifacts-dir artifacts/one_person_classic_ml_majority_vote_metrics_each_esp
 ```
 
-Веса для этого в 
-```
-artifacts/classic_ml_majority_vote_metrics_each_esp
-```
